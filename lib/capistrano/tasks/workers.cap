@@ -1,0 +1,29 @@
+require 'capistrano/puma/utility'
+
+include Capistrano::Puma::Utility
+
+namespace :puma do
+  namespace :workers do
+    desc 'Number of workers'
+    task :count do
+      on roles puma_roles do |host|
+        check_puma_pid
+
+        pid = capture("cat #{fetch(:puma_pid)}").strip
+        workers_count = capture("ps ax | grep -c 'puma: cluster worker [0-9]\\+: #{pid}'").to_i
+
+        log "Workers on #{host.hostname}: #{workers_count}"
+      end
+    end
+
+    desc 'Add a worker'
+    task :add do
+      puma_signal(:TTIN)
+    end
+
+    desc 'Remove a worker'
+    task :remove do
+      puma_signal(:TTOU)
+    end
+  end
+end

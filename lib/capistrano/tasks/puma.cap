@@ -1,0 +1,63 @@
+require 'capistrano/puma/utility'
+
+include Capistrano::Puma::Utility
+
+namespace :load do
+  task :defaults do
+    # Bin maps
+    set :rbenv_map_bins, fetch(:rbenv_map_bins).to_a.concat(%w( puma pumactl ))
+    set :rvm_map_bins, fetch(:rvm_map_bins).to_a.concat(%w( puma pumactl ))
+
+    # Environment
+    set :puma_env, -> { fetch(:rack_env, fetch(:rails_env, fetch(:stage))) }
+    set :puma_roles, :app
+    set :puma_user, nil
+    set :puma_bundle, -> { fetch(:bundle_cmd, :bundle) }
+    set :puma_bin, :puma
+    set :pumactl_bin, :pumactl
+    set :puma_conf, -> { File.join(release_path, 'config', 'puma', "#{fetch(:stage)}.rb") }
+    set :puma_pid, -> { File.join(shared_path, 'tmp', 'pids', 'puma.pid') }
+    set :puma_state, -> { File.join(shared_path, 'tmp', 'pids', 'puma.state') }
+
+    # Misc
+    set :puma_restart_strategy, :restart
+  end
+end
+
+namespace :puma do
+  desc 'Start puma'
+  task :start do
+    on roles puma_roles do
+      start_puma
+    end
+  end
+
+  desc 'Stop puma'
+  task :stop do
+    on roles puma_roles do
+      stop_puma
+    end
+  end
+
+  desc 'Restart puma'
+  task :restart do
+    on roles puma_roles do
+      restart_puma
+    end
+  end
+
+  desc 'Phased restart puma'
+  task :'phased-restart' do
+    on roles puma_roles do
+      phased_restart_puma
+    end
+  end
+
+  task :deploy_restart do
+    on roles puma_roles do
+      puma_deploy_restart
+    end
+  end
+
+  after 'deploy:publishing', :deploy_restart
+end
