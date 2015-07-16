@@ -85,12 +85,12 @@ module Capistrano
       def stop_puma
         return unless check_puma_pid
 
-        puma_execute puma_cmd(:pumactl_bin), "-S #{fetch(:puma_state)}", :stop
+        puma_execute puma_cmd(:pumactl_bin), "-S #{fetch(:puma_state)}", "-F #{fetch(:puma_conf)}", :stop
       end
 
       def restart_puma
         if check_puma_pid
-          puma_execute puma_cmd(:pumactl_bin), "-S #{fetch(:puma_state)}", :restart
+          puma_execute puma_cmd(:pumactl_bin), "-S #{fetch(:puma_state)}", "-F #{fetch(:puma_conf)}", :restart
         else
           start_puma
         end
@@ -98,7 +98,7 @@ module Capistrano
 
       def phased_restart_puma
         if check_puma_pid
-          puma_execute puma_cmd(:pumactl_bin), "-S #{fetch(:puma_state)}", 'phased-restart'
+          puma_execute puma_cmd(:pumactl_bin), "-S #{fetch(:puma_state)}", "-F #{fetch(:puma_conf)}", 'phased-restart'
         else
           start_puma
         end
