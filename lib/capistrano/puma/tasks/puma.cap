@@ -1,0 +1,55 @@
+namespace :load do
+  task :defaults do
+    # Bin maps
+    set :rbenv_map_bins, Array(fetch(:rbenv_map_bins)).concat(%w( puma pumactl ))
+    set :rvm_map_bins,   Array(fetch(:rvm_map_bins)).concat(%w( puma pumactl ))
+    set :bundle_bins,    Array(fetch(:bundle_bins)).concat(%w( puma pumactl ))
+
+    # Environment
+    set :puma_roles,  :app
+    set :puma_env,    -> { fetch(:rack_env, fetch(:rails_env, fetch(:stage))) }
+    set :puma_user,   -> { fetch(:app_user, nil) }
+    set :puma_conf,   -> { File.join(release_path, 'config', 'puma', "#{fetch(:stage)}.rb") }
+    set :puma_pid,    -> { File.join(shared_path, 'tmp', 'pids', 'puma.pid') }
+    set :puma_state,  -> { File.join(shared_path, 'tmp', 'pids', 'puma.state') }
+
+    # Misc
+    set :puma_restart_strategy, 'phased-restart'
+  end
+end
+
+namespace :puma do
+  desc 'Start puma'
+  task :start do
+    run_puma_cmd do
+      start_puma
+    end
+  end
+
+  desc 'Stop puma'
+  task :stop do
+    run_puma_cmd do
+      stop_puma
+    end
+  end
+
+  desc 'Restart puma'
+  task :restart do
+    run_puma_cmd do
+      restart_puma(:restart)
+    end
+  end
+
+  desc 'Phased restart puma'
+  task :'phased-restart' do
+    run_puma_cmd do
+      restart_puma(:'phased-restart')
+    end
+  end
+
+  after 'deploy:published', 'puma_deploy_restart' do
+    run_puma_cmd do
+      restart_puma
+    end
+  end
+end

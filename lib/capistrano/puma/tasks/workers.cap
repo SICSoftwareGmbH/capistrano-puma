@@ -1,0 +1,31 @@
+namespace :puma do
+  namespace :workers do
+    desc 'Number of workers'
+    task :count do
+      run_puma_cmd do
+        if puma_running?
+          pid = capture("cat #{fetch(:puma_pid)}").strip
+          workers_count = capture("ps ax | grep -c 'puma: cluster worker [0-9]\\+: #{pid}'").to_i
+
+          log "Workers on #{host.hostname}: #{workers_count}"
+        else
+          log "Puma not running!"
+        end
+      end
+    end
+
+    desc 'Add a worker'
+    task :add do
+      run_puma_cmd do
+        puma_signal(:TTIN)
+      end
+    end
+
+    desc 'Remove a worker'
+    task :remove do
+      run_puma_cmd do
+        puma_signal(:TTOU)
+      end
+    end
+  end
+end

@@ -1,76 +1,37 @@
-require 'tempfile'
-
 module Capistrano
   module Puma
     module Utility
-      def puma_roles
-        fetch(:puma_roles, :app)
-      end
-
-      def puma_cmd(cmd)
-        cmds = []
-
-        if fetch(:puma_bundle)
-          cmds += fetch(:puma_bundle).to_s.split(/\s+/)
-          cmds << 'exec'
-        end
-
-        cmds += fetch(cmd).to_s.split(/\s+/)
-
-        cmds.compact
-      end
-
-      def check_puma_config
-        return if puma_test "[ -f #{fetch(:puma_conf)} ]"
-
-        fail "Puma config file missing: #{fetch(:puma_conf)}"
-      end
-
-      def puma_signal(sig)
-        #unless check_puma_pid
-        #  fail "Puma is not running!"
-        #end
-
-        on roles puma_roles do
-          puma_execute :kill, "-#{sig}", "$( cat #{fetch(:puma_pid)} )"
-        end
-      end
-
-      def puma_execute(*args)
-        check_puma_config
-
-        options = args.extract_options!
-
-        command = [:bash, '-l', '-c', "\"#{args.join(' ')}\""]
-
-        within release_path do
-          with rack_env: fetch(:puma_env), rails_env: fetch(:puma_env) do
-            if puma_user = fetch(:puma_user)
-              execute :sudo, '-u', puma_user, command, options
-            else
-              execute *command, options
+      def run_puma_cmd(&block)
+        on roles fetch(:puma_roles) do |host|
+          if host.user == fetch(:puma_user)
+            within release_path do
+              with rack_env: fetch(:puma_env), rails_env: fetch(:puma_env) do
+                instance_eval(&block)
+              end
+            end
+          else
+            as fetch(:puma_user) do
+              within release_path do
+                with rack_env: fetch(:puma_env), rails_env: fetch(:puma_env) do
+                  instance_eval(&block)
+                end
+              end
             end
           end
         end
       end
 
-      def puma_test(*args)
-        options = args.extract_options!
+      def puma_signal(sig)
+        fail('Puma is not running!') unless puma_running?
 
-        command = [:bash, '-l', '-c', "\"#{args.join(' ')}\""]
-
-        if puma_user = fetch(:puma_user)
-          test :sudo, '-u', puma_user, command, options
-        else
-          test *command, options
-        end
+        execute(:kill, "-#{sig}", "$( cat #{fetch(:puma_pid)} )")
       end
 
-      def check_puma_pid
-        return false unless test "[ -f #{fetch(:puma_pid)} ]"
+      def puma_running?
+        return false unless test("[ -f #{fetch(:puma_pid)} ]")
 
-        unless puma_test "kill -0 $( cat #{fetch(:puma_pid)} )"
-          puma_execute :rm, fetch(:puma_pid)
+        unless test(:kill, '-0', "$( cat #{fetch(:puma_pid)} )")
+          execute(:rm, fetch(:puma_pid))
 
           return false
         end
@@ -79,41 +40,30 @@ module Capistrano
       end
 
       def start_puma
-        puma_execute puma_cmd(:puma_bin), "-C #{fetch(:puma_conf)}", '--daemon'
+        execute(:puma, "-C #{fetch(:puma_conf)}", '--daemon')
+
+        4.times do
+          sleep 2
+
+          return if puma_running?
+        end
+
+        fail('Puma failed to start!')
       end
 
       def stop_puma
-        return unless check_puma_pid
+        return unless puma_running?
 
-        puma_execute puma_cmd(:pumactl_bin), "-S #{fetch(:puma_state)}", "-F #{fetch(:puma_conf)}", :stop
+        execute(:pumactl, "-S #{fetch(:puma_state)}", "-F #{fetch(:puma_conf)}", :stop)
       end
 
-      def restart_puma
-        if check_puma_pid
-          puma_execute puma_cmd(:pumactl_bin), "-S #{fetch(:puma_state)}", "-F #{fetch(:puma_conf)}", :restart
+      def restart_puma(strategy = nil)
+        if puma_running?
+          strategy ||= fetch(:puma_restart_strategy)
+
+          execute(:pumactl, "-S #{fetch(:puma_state)}", "-F #{fetch(:puma_conf)}", strategy)
         else
           start_puma
-        end
-      end
-
-      def phased_restart_puma
-        if check_puma_pid
-          puma_execute puma_cmd(:pumactl_bin), "-S #{fetch(:puma_state)}", "-F #{fetch(:puma_conf)}", 'phased-restart'
-        else
-          start_puma
-        end
-      end
-
-      def puma_deploy_restart
-        restart_strategy = fetch(:puma_restart_strategy, :restart).to_s
-
-        case restart_strategy
-        when 'restart'
-          restart_puma
-        when 'phased-restart'
-          phased_restart_puma
-        else
-          fail "Invalid restart strategy: #{restart_strategy}"
         end
       end
     end
